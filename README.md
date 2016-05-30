@@ -1,7 +1,7 @@
 MySQL Connector/Python
 ====
 
-This is fork of MySQL offical maintained [mysql-connector-python](https://github.com/mysql/mysql-connector-python).
+This is a fork of MySQL offical maintained [mysql-connector-python](https://github.com/mysql/mysql-connector-python).
 Aim to get started easily for beginners.
 
 
