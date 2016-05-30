@@ -92,8 +92,8 @@ maintainer = 'Nuno Mariz'
 maintainer_email = 'nuno.mariz@oracle.com'
 cpy_gpl_license = "GNU GPLv2 (with FOSS License Exception)"
 keywords = "mysql db",
-url = 'http://dev.mysql.com/doc/connector-python/en/index.html'
-download_url = 'http://dev.mysql.com/downloads/connector/python/'
+url = 'https://github.com/sanpingz/mysql-connector'
+download_url = 'https://github.com/sanpingz/mysql-connector/releases'
 classifiers = [
     'Development Status :: %s' % (DEVELOPMENT_STATUSES[VERSION[3]]),
     'Environment :: Other Environment',
