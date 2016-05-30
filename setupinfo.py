@@ -57,7 +57,7 @@ command_classes = {
 }
 
 package_dir = {'': 'lib'}
-name = 'mysql-connector-python'
+name = 'mysql-connector'
 version = '{0}.{1}.{2}'.format(*VERSION[0:3])
 
 extensions = [
