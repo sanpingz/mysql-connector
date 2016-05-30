@@ -1,13 +1,8 @@
-MySQL Connector/Python 2.1
+MySQL Connector/Python
 ====
 
 This is fork of MySQL offical maintained [mysql-connector-python](https://github.com/mysql/mysql-connector-python).
-
-MySQL Connector/Python
-
-Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
-
-License information can be found in the LICENSE.txt file.
+Aim to get started easily for beginners.
 
 
 ### Installation
@@ -23,8 +18,6 @@ Documentation for all Connector/Python versions can be found online here:
  
 [dev.mysql.com/doc/connector-python/en/](http://dev.mysql.com/doc/connector-python/en/)
 
-The source distribution of Connector/Python also contains example scripts.
-They can be found in the examples/ directory.
 
 ### Examples
 
