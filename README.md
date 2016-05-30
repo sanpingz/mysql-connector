@@ -19,6 +19,7 @@ From PyPI (recommend)
 ```bash
 pip install mysql-connector
 ```
+
 From source code
 ```bash
 python setup.py install
@@ -29,6 +30,8 @@ python setup.py install
 Documentation for all Connector/Python versions can be found online here:
 
 [dev.mysql.com/doc/connector-python/en/](http://dev.mysql.com/doc/connector-python/en/)
+
+The source distribution of Connector/Python also contains example scripts. They can be found in the examples/ directory.
 
 ### Examples
 
