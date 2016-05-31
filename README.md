@@ -45,7 +45,7 @@ else:
     cur = cnx.cursor()
     cur.execute('show databases;')
     for row in cur.fetchall():
-        print(row[0])
+        print(row)
 finally:
     if cur:
         cur.close()
