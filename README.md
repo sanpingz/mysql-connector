@@ -23,6 +23,7 @@ Documentation for all Connector/Python versions can be found online here:
 
 ```python
 import mysql.connector
+from mysql.connector import errorcode
 
 config = {
     'user': 'root',
@@ -35,9 +36,9 @@ cnx = cur = None
 try:
     cnx = mysql.connector.connect(**config)
 except mysql.connector.Error as err:
-    if err.errno == mysql.connector.ER_ACCESS_DENIED_ERROR:
+    if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
         print('Something is wrong with your user name or password')
-    elif err.errno == mysql.connector.ER_BAD_DB_ERROR:
+    elif err.errno == errorcode.ER_BAD_DB_ERROR:
         print("Database does not exist")
     else:
         print(err)
