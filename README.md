@@ -44,8 +44,8 @@ except mysql.connector.Error as err:
 else:
     cur = cnx.cursor()
     cur.execute('show databases;')
-    for db in cur.fetchall():
-        print(db[0])
+    for row in cur.fetchall():
+        print(row[0])
 finally:
     if cur:
         cur.close()
