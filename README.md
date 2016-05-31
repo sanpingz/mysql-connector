@@ -7,8 +7,13 @@ Aim to get started easily for beginners.
 
 ### Installation
 
+From PyPI (recommend)
 ```bash
 pip install mysql-connector
+```
+From source code
+```bash
+python setup.py install
 ```
 
 
