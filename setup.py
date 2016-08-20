@@ -31,8 +31,12 @@ To install MySQL Connector/Python:
 
 """
 
-from distutils.core import setup
-from distutils.command.install import INSTALL_SCHEMES
+try:
+    from setuptools import setup
+    from setuptools.command.install_scheme import INSTALL_SCHEMES
+except ImportError:
+    from distutils.core import setup
+    from distutils.command.install import INSTALL_SCHEMES
 
 # Make sure that data files are actually installed in the package directory
 for install_scheme in INSTALL_SCHEMES.values():
@@ -63,4 +67,3 @@ setup(
     cmdclass=setupinfo.command_classes,
     ext_modules=setupinfo.extensions,
 )
-
