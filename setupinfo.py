@@ -1,5 +1,5 @@
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2009, 2014, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2017, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -63,7 +63,7 @@ command_classes = {
 package_dir = {'': 'lib'}
 name = 'mysql-connector'
 version = '{0}.{1}.{2}'.format(*VERSION[0:3])
-
+mysqlxpb_macros = [("PY3", 1,)] if sys.version_info[0] == 3 else []
 extensions = [
     Extension("_mysql_connector",
               sources=[
@@ -73,7 +73,22 @@ extensions = [
                   "src/mysql_connector.c",
                   "src/force_cpp_linkage.cc",
               ],
-              include_dirs=['src/include'],)
+              include_dirs=['src/include']),
+    Extension(name="_mysqlxpb",
+              define_macros=mysqlxpb_macros,
+              sources=[
+                  "src/mysqlxpb/mysqlx/mysqlx.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_connection.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_crud.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_datatypes.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_expect.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_expr.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_notice.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_resultset.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_session.pb.cc",
+                  "src/mysqlxpb/mysqlx/mysqlx_sql.pb.cc",
+                  "src/mysqlxpb/mysqlxpb.cc"
+              ])
 ]
 
 packages = [
@@ -83,6 +98,9 @@ packages = [
     'mysql.connector.locales.eng',
     'mysql.connector.django',
     'mysql.connector.fabric',
+    'mysqlx',
+    'mysqlx.locales',
+    'mysqlx.locales.eng',
 ]
 description = "MySQL driver written in Python"
 long_description = """
@@ -91,8 +109,8 @@ libraries and implements the DB API v2.0 specification (PEP-249).
 """
 author = 'Oracle and/or its affiliates'
 author_email = ''
-maintainer = 'Geert Vanderkelen'
-maintainer_email = 'geert.vanderkelen@oracle.com'
+maintainer = 'Nuno Mariz'
+maintainer_email = 'nuno.mariz@oracle.com'
 cpy_gpl_license = "GNU GPLv2 (with FOSS License Exception)"
 keywords = "mysql db",
 url = 'https://github.com/sanpingz/mysql-connector'
@@ -112,6 +130,8 @@ classifiers = [
     'Programming Language :: Python :: 3.1',
     'Programming Language :: Python :: 3.2',
     'Programming Language :: Python :: 3.3',
+    'Programming Language :: Python :: 3.4',
+    'Programming Language :: Python :: 3.5',
     'Topic :: Database',
     'Topic :: Software Development',
     'Topic :: Software Development :: Libraries :: Application Frameworks',

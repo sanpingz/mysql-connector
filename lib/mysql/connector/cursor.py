@@ -1,5 +1,5 @@
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2016, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -40,10 +40,19 @@ RE_SQL_ON_DUPLICATE = re.compile(
     r'''\s*ON\s+DUPLICATE\s+KEY(?:[^"'`]*["'`][^"'`]*["'`])*[^"'`]*$''',
     re.I | re.M | re.S)
 RE_SQL_INSERT_STMT = re.compile(
-    r"({0}|\s)*INSERT({0}|\s)*INTO.+VALUES.*".format(SQL_COMMENT),
+    r"({0}|\s)*INSERT({0}|\s)*INTO\s+[`'\"]?.+[`'\"]?(?:\.[`'\"]?.+[`'\"]?)"
+    r"{{0,2}}\s+VALUES\s*\(.+(?:\s*,.+)*\)".format(SQL_COMMENT),
     re.I | re.M | re.S)
 RE_SQL_INSERT_VALUES = re.compile(r'.*VALUES\s*(\(.*\)).*', re.I | re.M | re.S)
 RE_PY_PARAM = re.compile(b'(%s)')
+RE_PY_MAPPING_PARAM = re.compile(
+    br'''
+    %
+    \((?P<mapping_key>[^)]+)\)
+    (?P<conversion_type>[diouxXeEfFgGcrs%])
+    ''',
+    re.X
+)
 RE_SQL_SPLIT_STMTS = re.compile(
     b''';(?=(?:[^"'`]*["'`][^"'`]*["'`])*[^"'`]*$)''')
 RE_SQL_FIND_PARAM = re.compile(
@@ -73,6 +82,36 @@ class _ParamSubstitutor(object):
     def remaining(self):
         """Returns number of parameters remaining to be substituted"""
         return len(self.params) - self.index
+
+
+def _bytestr_format_dict(bytestr, value_dict):
+    """
+    >>> _bytestr_format_dict(b'%(a)s', {b'a': b'foobar'})
+    b'foobar
+    >>> _bytestr_format_dict(b'%%(a)s', {b'a': b'foobar'})
+    b'%%(a)s'
+    >>> _bytestr_format_dict(b'%%%(a)s', {b'a': b'foobar'})
+    b'%%foobar'
+    >>> _bytestr_format_dict(b'%(x)s %(y)s',
+    ...                      {b'x': b'x=%(y)s', b'y': b'y=%(x)s'})
+    b'x=%(y)s y=%(x)s'
+    """
+    def replace(matchobj):
+        """Replace pattern."""
+        value = None
+        groups = matchobj.groupdict()
+        if groups["conversion_type"] == b"%":
+            value = b"%"
+        if groups["conversion_type"] == b"s":
+            key = groups["mapping_key"].encode("utf-8") \
+                  if PY2 else groups["mapping_key"]
+            value = value_dict[key]
+        if value is None:
+            raise ValueError("Unsupported conversion_type: {0}"
+                             "".format(groups["conversion_type"]))
+        return value.decode("utf-8") if PY2 else value
+    return RE_PY_MAPPING_PARAM.sub(replace, bytestr.decode("utf-8")
+                                   if PY2 else bytestr)
 
 
 class CursorBase(MySQLCursorAbstract):
@@ -360,9 +399,9 @@ class MySQLCursor(CursorBase):
                 conv = escape(conv)
                 conv = quote(conv)
                 if PY2:
-                    res["%({0})s".format(key)] = conv
+                    res[key] = conv
                 else:
-                    res["%({0})s".format(key).encode()] = conv
+                    res[key.encode()] = conv
         except Exception as err:
             raise errors.ProgrammingError(
                 "Failed processing pyformat-parameters; %s" % err)
@@ -497,8 +536,8 @@ class MySQLCursor(CursorBase):
 
         if params is not None:
             if isinstance(params, dict):
-                for key, value in self._process_params_dict(params).items():
-                    stmt = stmt.replace(key, value)
+                stmt = _bytestr_format_dict(
+                    stmt, self._process_params_dict(params))
             elif isinstance(params, (list, tuple)):
                 psub = _ParamSubstitutor(self._process_params(params))
                 stmt = RE_PY_PARAM.sub(psub, stmt)
@@ -551,8 +590,8 @@ class MySQLCursor(CursorBase):
             for params in seq_params:
                 tmp = fmt
                 if isinstance(params, dict):
-                    for key, value in self._process_params_dict(params).items():
-                        tmp = tmp.replace(key, value)
+                    tmp = _bytestr_format_dict(
+                        tmp, self._process_params_dict(params))
                 else:
                     psub = _ParamSubstitutor(self._process_params(params))
                     tmp = RE_PY_PARAM.sub(psub, tmp)
@@ -712,10 +751,12 @@ class MySQLCursor(CursorBase):
             can_consume_results = self._connection._consume_results
             for result in self._connection.cmd_query_iter(call):
                 self._connection._consume_results = False
+                # pylint: disable=R0204
                 if self._raw:
                     tmp = MySQLCursorBufferedRaw(self._connection._get_self())
                 else:
                     tmp = MySQLCursorBuffered(self._connection._get_self())
+                # pylint: enable=R0204
                 tmp._executed = "(a result of {0})".format(call)
                 tmp._handle_result(result)
                 if tmp._warnings is not None:
@@ -723,7 +764,7 @@ class MySQLCursor(CursorBase):
                 if 'columns' in result:
                     results.append(tmp)
             self._connection._consume_results = can_consume_results
-            #pylint: enable=W0212
+            # pylint: enable=W0212
 
             if argnames:
                 select = "SELECT {0}".format(','.join(argtypes))

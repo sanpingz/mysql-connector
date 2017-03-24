@@ -1,5 +1,5 @@
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2017, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -343,13 +343,15 @@ class MySQLServerBase(object):
 class MySQLServer(MySQLServerBase):
     """Class for managing a MySQL server"""
 
-    def __init__(self, basedir, topdir, cnf, bind_address, port,
-                 name, datadir=None, tmpdir=None,
+    def __init__(self, basedir, topdir, cnf, bind_address, port, mysqlx_port,
+                 name, datadir=None, tmpdir=None, extra_args={},
                  unix_socket_folder=None, ssl_folder=None, sharedir=None):
+        self._extra_args = extra_args
         self._cnf = cnf
         self._option_file = os.path.join(topdir, 'my.cnf')
         self._bind_address = bind_address
         self._port = port
+        self._mysqlx_port = mysqlx_port
         self._topdir = topdir
         self._basedir = basedir
         self._ssldir = ssl_folder or topdir
@@ -358,6 +360,9 @@ class MySQLServer(MySQLServerBase):
         self._name = name
         self._unix_socket = os.path.join(unix_socket_folder or self._topdir,
                                          'mysql_cpy_' + name + '.sock')
+        self._mysqlx_unix_socket = os.path.join(unix_socket_folder \
+                or self._topdir, 'mysql_cpy_mysqlx_' + name + '.sock')
+
         self._pid_file = os.path.join(topdir,
                                       'mysql_cpy_' + name + '.pid')
         self._serverid = port + 100000
@@ -454,6 +459,11 @@ class MySQLServer(MySQLServerBase):
             "'Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y',"
             "'Y','Y','Y','Y','Y','','','','',0,0,0,0,"
             "@@default_authentication_plugin,'','N',"
+            "CURRENT_TIMESTAMP,NULL{1}), ('::1','root'{0},"
+            "'Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y',"
+            "'Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y','Y',"
+            "'Y','Y','Y','Y','Y','','','','',0,0,0,0,"
+            "@@default_authentication_plugin,'','N',"
             "CURRENT_TIMESTAMP,NULL{1});"
         )
         # MySQL 5.7.5+ creates no user while bootstrapping
@@ -540,6 +550,10 @@ class MySQLServer(MySQLServerBase):
         """Return the unix socket of the server"""
         return self._unix_socket
 
+    @property
+    def mysqlx_unix_socket(self):
+        return self._mysqlx_unix_socket
+
     def start(self):
         """Start a MySQL server"""
         if self.check_running():
@@ -554,13 +568,24 @@ class MySQLServer(MySQLServerBase):
             'tmpdir': _convert_forward_slash(self._tmpdir),
             'bind_address': self._bind_address,
             'port': self._port,
+            'mysqlx_port': self._mysqlx_port,
+            'mysqlx_plugin': 'mysqlx.so' if os.name == 'posix' else 'mysqlx',
             'unix_socket': _convert_forward_slash(self._unix_socket),
+            'mysqlx_unix_socket': _convert_forward_slash(
+                self._mysqlx_unix_socket),
             'ssl_dir': _convert_forward_slash(self._ssldir),
             'pid_file': _convert_forward_slash(self._pid_file),
             'serverid': self._serverid,
             'lc_messages_dir': _convert_forward_slash(
                 self._lc_messages_dir),
         }
+
+        for arg in self._extra_args:
+            if self._version < arg["version"]:
+                options.update(dict([(key, '') for key in
+                                     arg["options"].keys()]))
+            else:
+                options.update(arg["options"])
         try:
             fp = open(self._option_file, 'w')
             fp.write(self._cnf.format(**options))

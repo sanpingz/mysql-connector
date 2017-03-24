@@ -1,5 +1,5 @@
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2014, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2014, 2017, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -46,9 +46,11 @@ from glob import glob
 import os
 import shlex
 import struct
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT, check_call
 import sys
 import platform
+import shutil
+
 
 ARCH_64BIT = sys.maxsize > 2**32  # Works with Python 2.6 and greater
 py_arch = '64-bit' if ARCH_64BIT else '32-bit'
@@ -56,6 +58,14 @@ py_arch = '64-bit' if ARCH_64BIT else '32-bit'
 CEXT_OPTIONS = [
     ('with-mysql-capi=', None,
      "Location of MySQL C API installation or path to mysql_config"),
+    ('with-protobuf-include-dir=', None,
+     "Location of Protobuf include directory"),
+    ('with-protobuf-lib-dir=', None,
+     "Location of Protobuf library directory"),
+    ('with-protoc=', None,
+     "Location of Protobuf protoc binary"),
+    ('extra-compile-args=', None,
+     "Extra compile args")
 ]
 
 CEXT_STATIC_OPTIONS = [
@@ -136,7 +146,11 @@ def unix_lib_is64bit(lib_file):
         lib_file = mysqlclient_libs[-1]
 
     log.debug("# Using file command to test lib_file {0}".format(lib_file))
-    prc = Popen(['file', '-L', lib_file], stdin=PIPE, stderr=STDOUT,
+    if platform.uname() == 'SunOS':
+        cmd_list = ['file', '-L', lib_file]
+    else:
+        cmd_list = ['file', '-L', lib_file]
+    prc = Popen(cmd_list, stdin=PIPE, stderr=STDOUT,
                 stdout=PIPE)
     stdout = prc.communicate()[0]
     stdout = stdout.split(':')[1]
@@ -177,10 +191,12 @@ def get_mysql_config_info(mysql_config):
     libs = shlex.split(info['libs'])
     info['lib_dir'] = libs[0].replace('-L', '')
     info['libs'] = [ lib.replace('-l', '') for lib in libs[1:] ]
+    if platform.uname()[0] == 'SunOS':
+        info['lib_dir'] = info['lib_dir'].replace('-R', '')
+        info['libs'] = [lib.replace('-R', '') for lib in info['libs']]
     log.debug("# info['libs']: ")
     for lib in info['libs']:
         log.debug("#   {0}".format(lib))
-    log.error("# info['libs']: {0}".format(info['libs']))
     libs = shlex.split(info['libs_r'])
     info['lib_r_dir'] = libs[0].replace('-L', '')
     info['libs_r'] = [ lib.replace('-l', '') for lib in libs[1:] ]
@@ -190,11 +206,18 @@ def get_mysql_config_info(mysql_config):
     # Try to figure out the architecture
     info['arch'] = None
     if os.name == 'posix':
-        pathname = os.path.join(info['lib_dir'], 'lib' + info['libs'][0]) + '*'
+        if platform.uname()[0] == 'SunOS':
+            print("info['lib_dir']: {0}".format(info['lib_dir']))
+            print("info['libs'][0]: {0}".format(info['libs'][0]))
+            pathname = os.path.abspath(os.path.join(info['lib_dir'],
+                                                    'lib',
+                                                    info['libs'][0])) + '/*'
+        else:
+            pathname = os.path.join(info['lib_dir'],
+                                    'lib' + info['libs'][0]) + '*'
+        print("# Looking mysqlclient_lib at path: {0}".format(pathname))
+        log.debug("# searching mysqlclient_lib at: %s", pathname)
         libs = glob(pathname)
-        log.debug("# libs: {0}".format(libs))
-        for lib in libs:
-            log.debug("#-   {0}".format(lib))
         mysqlclient_libs = []
         for filepath in libs:
             _, filename = os.path.split(filepath)
@@ -213,7 +236,12 @@ def get_mysql_config_info(mysql_config):
                 log.debug("#+   {0}".format(mysqlclient_lib))
             log.debug("# tested mysqlclient_lib[-1]: "
                       "{0}".format(mysqlclient_libs[-1]))
-            proc = Popen(['file', '-L', mysqlclient_libs[-1]], stdout=PIPE,
+            if platform.uname()[0] == 'SunOS':
+                print("mysqlclient_lib: {0}".format(mysqlclient_libs[-1]))
+                cmd_list = ['file', mysqlclient_libs[-1]]
+            else:
+                cmd_list = ['file', '-L', mysqlclient_libs[-1]]
+            proc = Popen(cmd_list, stdout=PIPE,
                          universal_newlines=True)
             stdout, _ = proc.communicate()
             stdout = stdout.split(':')[1]
@@ -266,7 +294,11 @@ class BuildExtDynamic(build_ext):
 
     def initialize_options(self):
         build_ext.initialize_options(self)
+        self.extra_compile_args = None
         self.with_mysql_capi = None
+        self.with_protobuf_include_dir = None
+        self.with_protobuf_lib_dir = None
+        self.with_protoc = None
 
     def _finalize_connector_c(self, connc_loc):
         """Finalize the --with-connector-c command line argument
@@ -374,10 +406,7 @@ class BuildExtDynamic(build_ext):
 
         # We try to offer a nice message when the architecture of Python
         # is not the same as MySQL Connector/C binaries.
-        py_arch = '64-bit' if ARCH_64BIT else '32-bit'
-        log.debug("# Python architecture: {0}".format(py_arch))
-        log.debug("# Python ARCH_64BIT: {0}".format(ARCH_64BIT))
-        log.debug("# self.arch: {0}".format(self.arch))
+        print("# self.arch: {0}".format(self.arch))
         if ARCH_64BIT != connc_64bit:
             log.error("Python is {0}, but does not "
                       "match MySQL C API {1} architecture, "
@@ -388,13 +417,61 @@ class BuildExtDynamic(build_ext):
             sys.exit(1)
 
     def finalize_options(self):
-        self.set_undefined_options('install',
-                                   ('with_mysql_capi', 'with_mysql_capi'))
+        self.set_undefined_options(
+            'install',
+            ('extra_compile_args', 'extra_compile_args'),
+            ('with_mysql_capi', 'with_mysql_capi'),
+            ('with_protobuf_include_dir', 'with_protobuf_include_dir'),
+            ('with_protobuf_lib_dir', 'with_protobuf_lib_dir'),
+            ('with_protoc', 'with_protoc'))
 
         build_ext.finalize_options(self)
 
+        print("# Python architecture: {0}".format(py_arch))
+        print("# Python ARCH_64BIT: {0}".format(ARCH_64BIT))
+
         if self.with_mysql_capi:
             self._finalize_connector_c(self.with_mysql_capi)
+
+        if not self.with_protobuf_include_dir:
+            self.with_protobuf_include_dir = \
+                os.environ.get("MYSQLXPB_PROTOBUF_INCLUDE_DIR")
+
+        if not self.with_protobuf_lib_dir:
+            self.with_protobuf_lib_dir = \
+                os.environ.get("MYSQLXPB_PROTOBUF_LIB_DIR")
+
+        if not self.with_protoc:
+            self.with_protoc = os.environ.get("MYSQLXPB_PROTOC")
+
+    def run_protoc(self):
+        if self.with_protobuf_include_dir:
+            print("# Protobuf include directory: {0}"
+                  "".format(self.with_protobuf_include_dir))
+        else:
+            log.error("Unable to find Protobuf include directory.")
+            sys.exit(1)
+
+        if self.with_protobuf_lib_dir:
+            print("# Protobuf library directory: {0}"
+                  "".format(self.with_protobuf_lib_dir))
+        else:
+            log.error("Unable to find Protobuf library directory.")
+            sys.exit(1)
+
+        if self.with_protoc:
+            print("# Protobuf protoc binary: {0}".format(self.with_protoc))
+        else:
+            log.error("Unable to find Protobuf protoc binary.")
+            sys.exit(1)
+
+        base_path = os.path.join(os.getcwd(), "src", "mysqlxpb", "mysqlx")
+        command = [self.with_protoc, "-I"]
+        command.append(os.path.join(base_path, "protocol"))
+        command.extend(glob(os.path.join(base_path, "protocol", "*.proto")))
+        command.append("--cpp_out={0}".format(base_path))
+        log.info("# Running protoc command: {0}".format(" ".join(command)))
+        check_call(command)
 
     def fix_compiler(self):
         platform = get_platform()
@@ -437,6 +514,18 @@ class BuildExtDynamic(build_ext):
         # Add system headers to Extensions extra_compile_args
         sysheaders = [ '-isystem' + dir for dir in cc.include_dirs]
         for ext in self.extensions:
+            # Add Protobuf include and library dirs
+            if ext.name == "_mysqlxpb":
+                ext.include_dirs.append(self.with_protobuf_include_dir)
+                ext.library_dirs.append(self.with_protobuf_lib_dir)
+                if os.name == 'nt':
+                    ext.libraries.append("libprotobuf")
+                else:
+                    ext.libraries.append("protobuf")
+            # Add extra compile args
+            if self.extra_compile_args:
+                ext.extra_compile_args.append(self.extra_compile_args)
+            # Add system headers
             for sysheader in sysheaders:
                 if sysheader not in ext.extra_compile_args:
                     ext.extra_compile_args.append(sysheader)
@@ -447,16 +536,26 @@ class BuildExtDynamic(build_ext):
 
     def run(self):
         """Run the command"""
-        if not self.with_mysql_capi:
-            return
-
         if os.name == 'nt':
+            for ext in self.extensions:
+                # Add Protobuf include and library dirs
+                if ext.name == "_mysqlxpb":
+                    ext.include_dirs.append(self.with_protobuf_include_dir)
+                    ext.library_dirs.append(self.with_protobuf_lib_dir)
+                    ext.libraries.append("libprotobuf")
+                # Use the multithread, static version of the run-time library
+                ext.extra_compile_args.append("/MT")
+                # Add extra compile args
+                if self.extra_compile_args:
+                    ext.extra_compile_args.extend(self.extra_compile_args)
+            self.run_protoc()
             build_ext.run(self)
         else:
             self.real_build_extensions = self.build_extensions
             self.build_extensions = lambda: None
             build_ext.run(self)
             self.fix_compiler()
+            self.run_protoc()
             self.real_build_extensions()
 
 
@@ -467,29 +566,117 @@ class BuildExtStatic(BuildExtDynamic):
     user_options = build_ext.user_options + CEXT_OPTIONS
 
     def finalize_options(self):
+        options_pairs = []
         if not self.with_mysql_capi:
-            self.set_undefined_options('install',
-                                       ('with_mysql_capi', 'with_mysql_capi'))
+            options_pairs.append(('with_mysql_capi', 'with_mysql_capi'))
+        if not self.with_protobuf_include_dir:
+            options_pairs.append(('with_protobuf_include_dir',
+                                  'with_protobuf_include_dir'))
+        if not self.with_protobuf_lib_dir:
+            options_pairs.append(('with_protobuf_lib_dir',
+                                  'with_protobuf_lib_dir'))
+        if not self.with_protoc:
+            options_pairs.append(('with_protoc', 'with_protoc'))
+        if options_pairs:
+            self.set_undefined_options('install', *options_pairs)
 
         build_ext.finalize_options(self)
+
+        print("# Python architecture: {0}".format(py_arch))
+        print("# Python ARCH_64BIT: {0}".format(ARCH_64BIT))
+
         self.connc_lib = os.path.join(self.build_temp, 'connc', 'lib')
         self.connc_include = os.path.join(self.build_temp, 'connc', 'include')
+        self.protobuf_lib = os.path.join(self.build_temp, 'protobuf', 'lib')
+        self.protobuf_include = os.path.join(self.build_temp, 'protobuf', 'include')
 
         if self.with_mysql_capi:
             self._finalize_connector_c(self.with_mysql_capi)
+
+        if not self.with_protobuf_include_dir:
+            self.with_protobuf_include_dir = \
+                os.environ.get("MYSQLXPB_PROTOBUF_INCLUDE_DIR")
+
+        if not self.with_protobuf_lib_dir:
+            self.with_protobuf_lib_dir = \
+                os.environ.get("MYSQLXPB_PROTOBUF_LIB_DIR")
+
+        if not self.with_protoc:
+            self.with_protoc = os.environ.get("MYSQLXPB_PROTOC")
+
+        if self.with_protobuf_include_dir:
+            print("# Protobuf include directory: {0}"
+                  "".format(self.with_protobuf_include_dir))
+        else:
+            log.error("Unable to find Protobuf include directory.")
+            sys.exit(1)
+
+        if self.with_protobuf_lib_dir:
+            print("# Protobuf library directory: {0}"
+                  "".format(self.with_protobuf_lib_dir))
+        else:
+            log.error("Unable to find Protobuf library directory.")
+            sys.exit(1)
+
+        if self.with_protoc:
+            print("# Protobuf protoc binary: {0}".format(self.with_protoc))
+        else:
+            log.error("Unable to find Protobuf protoc binary.")
+            sys.exit(1)
+
+        self._finalize_protobuf()
 
     def _finalize_connector_c(self, connc_loc):
         if not os.path.isdir(connc_loc):
             log.error("MySQL C API should be a directory")
             sys.exit(1)
 
+        log.info("Copying MySQL libraries")
         copy_tree(os.path.join(connc_loc, 'lib'), self.connc_lib)
+        log.info("Copying MySQL header files")
         copy_tree(os.path.join(connc_loc, 'include'), self.connc_include)
 
         # Remove all but static libraries to force static linking
-        for lib_file in os.listdir(self.connc_lib):
-            if os.name == 'posix' and not lib_file.endswith('.a'):
-                os.unlink(os.path.join(self.connc_lib, lib_file))
+        if os.name == 'posix':
+            log.info("Removing non-static MySQL libraries from %s" % self.connc_lib)
+            for lib_file in os.listdir(self.connc_lib):
+                lib_file_path = os.path.join(self.connc_lib, lib_file)
+                if os.path.isfile(lib_file_path) and not lib_file.endswith('.a'):
+                    os.unlink(os.path.join(self.connc_lib, lib_file))
+
+    def _finalize_protobuf(self):
+        if not os.path.isdir(self.with_protobuf_lib_dir):
+            log.error("Protobuf library dir should be a directory")
+            sys.exit(1)
+
+        if not os.path.isdir(self.with_protobuf_include_dir):
+            log.error("Protobuf include dir should be a directory")
+            sys.exit(1)
+
+        if not os.path.exists(self.protobuf_lib):
+            os.makedirs(self.protobuf_lib)
+
+        if not os.path.exists(self.protobuf_include):
+            os.makedirs(self.protobuf_include)
+
+        log.info("Copying Protobuf libraries")
+        lib_files = glob(os.path.join(self.with_protobuf_lib_dir, "libprotobuf*"))
+        for lib_file in lib_files:
+            if os.path.isfile(lib_file):
+                log.info("copying {0} -> {1}".format(lib_file, self.protobuf_lib))
+                shutil.copy2(lib_file, self.protobuf_lib)
+
+        log.info("Copying Protobuf header files")
+        copy_tree(self.with_protobuf_include_dir, self.protobuf_include)
+
+        # Remove all but static libraries to force static linking
+        if os.name == "posix":
+            log.info("Removing non-static Protobuf libraries from {0}"
+                     "".format(self.protobuf_lib))
+            for lib_file in os.listdir(self.protobuf_lib):
+                lib_file_path = os.path.join(self.protobuf_lib, lib_file)
+                if os.path.isfile(lib_file_path) and not lib_file.endswith(".a"):
+                    os.unlink(os.path.join(self.protobuf_lib, lib_file))
 
     def fix_compiler(self):
         BuildExtDynamic.fix_compiler(self)
@@ -501,7 +688,8 @@ class BuildExtStatic(BuildExtDynamic):
         if os.name == 'posix':
             include_dirs.append(self.connc_include)
             library_dirs.append(self.connc_lib)
-            libraries.append("mysqlclient")
+            if self.with_mysql_capi:
+                libraries.append("mysqlclient")
 
             # As we statically link and the "libmysqlclient.a" library
             # carry no information what it depends on, we need to
@@ -510,9 +698,16 @@ class BuildExtStatic(BuildExtDynamic):
                 libraries.append("rt")
 
         for ext in self.extensions:
-            ext.include_dirs.extend(include_dirs)
-            ext.library_dirs.extend(library_dirs)
-            ext.libraries.extend(libraries)
+            if ext.name == "_mysql_connector":
+                ext.include_dirs.extend(include_dirs)
+                ext.library_dirs.extend(library_dirs)
+                ext.libraries.extend(libraries)
+            elif ext.name == "_mysqlxpb" \
+                 and platform.system() not in ["Darwin", "Windows"]:
+                ext.libraries.append("rt")
+            # Add extra compile args
+            if self.extra_compile_args:
+                ext.extra_compile_args.append(self.extra_compile_args)
 
 
 class InstallLib(install_lib):
@@ -561,12 +756,17 @@ class Install(install):
 
     def initialize_options(self):
         install.initialize_options(self)
+        self.extra_compile_args = None
         self.with_mysql_capi = None
+        self.with_protobuf_include_dir = None
+        self.with_protobuf_lib_dir = None
+        self.with_protoc = None
         self.byte_code_only = None
         self.static = None
 
     def finalize_options(self):
         if self.static:
+            log.info("Linking C Extension statically with libraries")
             self.distribution.cmdclass['build_ext'] = BuildExtStatic
 
         if self.byte_code_only is None:
@@ -586,7 +786,7 @@ class Install(install):
 
     def run(self):
         if not self.need_ext:
-            log.info("Not Installing C Extension")
+            log.info("Not Installing MySQL C Extension")
         else:
-            log.info("Installing C Extension")
+            log.info("Installing MySQL C Extension")
         install.run(self)

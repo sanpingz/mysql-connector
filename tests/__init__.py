@@ -1,5 +1,5 @@
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2013, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2013, 2017, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -40,7 +40,6 @@ import traceback
 from imp import load_source
 from functools import wraps
 from pkgutil import walk_packages
-
 
 LOGGER_NAME = "myconnpy_tests"
 LOGGER = logging.getLogger(LOGGER_NAME)
@@ -119,6 +118,7 @@ FABRIC_CONFIG = None
 
 __all__ = [
     'MySQLConnectorTests',
+    'MySQLxTests',
     'get_test_names', 'printmsg',
     'LOGGER_NAME',
     'DummySocket',
@@ -303,6 +303,25 @@ def fake_hostname():
         return ''.join(["%02x" % c for c in os.urandom(4)])
 
 
+def get_mysqlx_config(name=None, index=None):
+    """Get MySQLx enabled server configuration for running MySQL server
+
+    If no name is given, then we will return the configuration of the
+    first added.
+    """
+    if not name and not index:
+        return MYSQL_SERVERS[0].xplugin_config.copy()
+
+    if name:
+        for server in MYSQL_SERVERS:
+            if server.name == name:
+                return server.xplugin_config.copy()
+    elif index:
+        return MYSQL_SERVERS[index].xplugin_config.copy()
+
+    return None
+
+
 def get_mysql_config(name=None, index=None):
     """Get MySQL server configuration for running MySQL server
 
@@ -431,10 +450,13 @@ def foreach_cnx(*cnx_classes, **extra_config):
                     self.cnx = cnx_class(**self.config)
                     self._testMethodName = "{0} (using {1})".format(
                         func.__name__, cnx_class.__name__)
-                except:
+                except Exception as exc:
                     if hasattr(self, 'cnx'):
                         # We will rollback/close later
                         pass
+                    else:
+                        traceback.print_exc(file=sys.stdout)
+                        raise exc
                 try:
                     func(self, *args, **kwargs)
                 except Exception as exc:
@@ -456,6 +478,7 @@ class MySQLConnectorTests(unittest.TestCase):
     def __init__(self, methodName='runTest'):
         from mysql.connector import connection
         self.all_cnx_classes = [connection.MySQLConnection]
+        self.maxDiff = 64
         try:
             import _mysql_connector
             from mysql.connector import connection_cext
@@ -685,6 +708,34 @@ class CMySQLCursorTests(CMySQLConnectorTests):
             self.cleanup_table(cnx, tbl)
 
 
+class MySQLxTests(MySQLConnectorTests):
+
+    def __init__(self, methodName="runTest"):
+        super(MySQLxTests, self).__init__(methodName=methodName)
+
+    def run(self, result=None):
+        if sys.version_info[0:2] == (2, 6):
+            test_method = getattr(self, self._testMethodName)
+            if (getattr(self.__class__, "__unittest_skip__", False) or
+                    getattr(test_method, "__unittest_skip__", False)):
+                # We skipped a class
+                try:
+                    why = (
+                        getattr(self.__class__, '__unittest_skip_why__', '')
+                        or
+                        getattr(test_method, '__unittest_skip_why__', '')
+                    )
+                    self._addSkip(result, why)
+                finally:
+                    result.stopTest(self)
+                return
+
+        if PY2:
+            return super(MySQLxTests, self).run(result)
+        else:
+            return super().run(result)
+
+
 def printmsg(msg=None):
     if msg is not None:
         print(msg)
@@ -748,7 +799,9 @@ def setup_logger(logger, debug=False, logfile=None):
     LOGGER.addHandler(handler)
 
 
-def install_connector(root_dir, install_dir, connc_location=None):
+def install_connector(root_dir, install_dir, protobuf_include_dir,
+                      protobuf_lib_dir, protoc, connc_location=None,
+                      extra_compile_args=None):
     """Install Connector/Python in working directory
     """
     logfile = 'myconnpy_install.log'
@@ -771,11 +824,18 @@ def install_connector(root_dir, install_dir, connc_location=None):
     cmd.extend([
         'install',
         '--root', install_dir,
-        '--install-lib', '.'
+        '--install-lib', '.',
+        '--with-protobuf-include-dir', protobuf_include_dir,
+        '--with-protobuf-lib-dir', protobuf_lib_dir,
+        '--with-protoc', protoc,
+        '--static',
     ])
 
     if connc_location:
         cmd.extend(['--with-mysql-capi', connc_location])
+
+    if extra_compile_args:
+        cmd.extend(['--extra-compile-args', extra_compile_args])
 
     prc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
                            stderr=subprocess.STDOUT, stdout=subprocess.PIPE,

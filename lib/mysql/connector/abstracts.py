@@ -1,5 +1,5 @@
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2014, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2014, 2016, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -22,9 +22,6 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 
 """Module gathering all abstract base classes"""
-
-# Issue with pylint and NotImplementedError
-# pylint: disable=R0921
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import re
@@ -233,6 +230,13 @@ class MySQLConnectionAbstract(object):
                 self._consume_results = True
         except KeyError:
             self._consume_results = False
+
+        # Configure auth_plugin
+        try:
+            self._auth_plugin = config['auth_plugin']
+            del config['auth_plugin']
+        except KeyError:
+            self._auth_plugin = ''
 
         # Configure character set and collation
         if 'charset' in config or 'collation' in config:
@@ -637,7 +641,6 @@ class MySQLConnectionAbstract(object):
         """
         if charset:
             if isinstance(charset, int):
-                self._charset_id = charset
                 (self._charset_id, charset_name, collation_name) = \
                     CharacterSet.get_charset_info(charset)
             elif isinstance(charset, str):

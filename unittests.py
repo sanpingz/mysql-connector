@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # MySQL Connector/Python - MySQL driver written in Python.
-# Copyright (c) 2009, 2015, Oracle and/or its affiliates. All rights reserved.
+# Copyright (c) 2009, 2017, Oracle and/or its affiliates. All rights reserved.
 
 # MySQL Connector/Python is licensed under the terms of the GPLv2
 # <http://www.gnu.org/licenses/old-licenses/gpl-2.0.html>, like most
@@ -96,10 +96,14 @@ else:
     tests.TEST_BUILD_DIR = os.path.join(_TOPDIR, 'build', 'testing')
     sys.path.insert(0, tests.TEST_BUILD_DIR)
 
-
 # MySQL option file template. Platform specifics dynamically added later.
 MY_CNF = """
 # MySQL option file for MySQL Connector/Python tests
+[mysqld-5.7]
+plugin-load={mysqlx_plugin}
+loose_mysqlx_port={mysqlx_port}
+{mysqlx_bind_address}
+
 [mysqld-5.6]
 innodb_compression_level = 0
 innodb_compression_failure_threshold_pct = 0
@@ -282,6 +286,12 @@ _UNITTESTS_CMD_ARGS = {
         'type_optparse': int,
     },
 
+    ('', '--mysqlx-port'): {
+        'dest': 'mysqlx_port', 'metavar': 'NUMBER', 'default': 33060,
+        'type': int, 'help': 'First TCP/IP port to use for mysqlx protocol.',
+        'type_optparse': int,
+    },
+
     ('', '--unix-socket'): {
         'dest': 'unix_socket_folder', 'metavar': 'NAME',
         'help': 'Folder where UNIX Sockets will be created'
@@ -319,6 +329,24 @@ _UNITTESTS_CMD_ARGS = {
                  "or full path to mysql_config")
     },
 
+    ('', '--with-protobuf-include-dir'): {
+        'dest': 'protobuf_include_dir', 'metavar': 'NAME',
+        'default': None,
+        'help': ("Location of Protobuf include directory")
+    },
+
+    ('', '--with-protobuf-lib-dir'): {
+        'dest': 'protobuf_lib_dir', 'metavar': 'NAME',
+        'default': None,
+        'help': ("Location of Protobuf library directory")
+    },
+
+    ('', '--with-protoc'): {
+        'dest': 'protoc', 'metavar': 'NAME',
+        'default': None,
+        'help': ("Location of Protobuf protoc binary")
+    },
+
     ('', '--with-fabric'): {
         'dest': 'fabric_config', 'metavar': 'NAME',
         'default': None,
@@ -329,6 +357,12 @@ _UNITTESTS_CMD_ARGS = {
         'dest': 'fabric_protocol', 'metavar': 'NAME',
         'default': 'xmlrpc',
         'help': ("Protocol to talk to MySQL Fabric")
+    },
+
+    ('', '--extra-compile-args'): {
+        'dest': 'extra_compile_args', 'metavar': 'NAME',
+        'default': None,
+        'help': ("Extra compile args for the C extension")
     },
 }
 
@@ -593,6 +627,11 @@ def setup_stats_db(cnx):
 def init_mysql_server(port, options):
     """Initialize a MySQL Server"""
     name = 'server{0}'.format(len(tests.MYSQL_SERVERS) + 1)
+    extra_args = [{
+        "version": (5, 7, 17),
+        "options": {"mysqlx_bind_address": "mysqlx_bind_address={0}".format("::"
+                    if tests.IPV6_AVAILABLE else "0.0.0.0")}
+    }]
 
     try:
         mysql_server = mysqld.MySQLServer(
@@ -601,9 +640,11 @@ def init_mysql_server(port, options):
             cnf=MY_CNF,
             bind_address=options.bind_address,
             port=port,
+            mysqlx_port=options.mysqlx_port,
             unix_socket_folder=options.unix_socket_folder,
             ssl_folder=os.path.abspath(tests.SSL_DIR),
             name=name,
+            extra_args=extra_args,
             sharedir=options.mysql_sharedir)
     except tests.mysqld.MySQLBootstrapError as err:
         LOGGER.error("Failed initializing MySQL server "
@@ -655,6 +696,18 @@ def init_mysql_server(port, options):
         'database': 'myconnpy',
         'connection_timeout': 10,
     }
+
+    mysql_server.xplugin_config = {
+        'host': options.host,
+        'port': options.mysqlx_port,
+        'user': 'root',
+        'password': '',
+        'schema': 'myconnpy'
+    }
+
+    if mysql_server.version >= (5, 7, 15):
+        mysql_server.xplugin_config["socket"] = mysql_server.mysqlx_unix_socket
+        os.environ["MYSQLX_UNIX_PORT"] = mysql_server.mysqlx_unix_socket
 
     # Bootstrap and start a MySQL server
     if have_to_bootstrap:
@@ -754,8 +807,26 @@ def main():
 
     tests.MYSQL_CAPI = options.mysql_capi
     if not options.skip_install:
+        protobuf_include_dir = options.protobuf_include_dir or \
+            os.environ.get("MYSQLXPB_PROTOBUF_INCLUDE_DIR")
+        protobuf_lib_dir = options.protobuf_lib_dir or \
+            os.environ.get("MYSQLXPB_PROTOBUF_LIB_DIR")
+        protoc = options.protoc or os.environ.get("MYSQLXPB_PROTOC")
+        if not protobuf_include_dir:
+            LOGGER.error("Unable to find Protobuf include directory.")
+            sys.exit(1)
+        if not protobuf_lib_dir:
+            LOGGER.error("Unable to find Protobuf library directory.")
+            sys.exit(1)
+        if not protoc:
+            LOGGER.error("Unable to find Protobuf protoc binary.")
+            sys.exit(1)
         tests.install_connector(_TOPDIR, tests.TEST_BUILD_DIR,
-                                options.mysql_capi)
+                                protobuf_include_dir,
+                                protobuf_lib_dir,
+                                protoc,
+                                options.mysql_capi,
+                                options.extra_compile_args)
 
     # Which tests cases to run
     testcases = []
