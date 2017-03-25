@@ -1,9 +1,20 @@
 MySQL Connector/Python
 ====
 
-This is a fork of MySQL offical maintained [mysql-connector-python](https://github.com/mysql/mysql-connector-python).
+This is a fork of [mysql-connector-python](https://github.com/mysql/mysql-connector-python).
 Aim to get started easily for beginners.
 
+### Dependencies
+
+mysql-connector (version >= 2.2.3) requires [Protobuf C++](https://developers.google.com/protocol-buffers/docs/downloads) (version >= 2.6.0)
+
+Install **Protobuf** on your platform. e.g., on macOS: `brew install protobuf`, and then specify the install paths:
+```bash
+# Use the proper paths based on your installation
+export MYSQLXPB_PROTOBUF_INCLUDE_DIR=/usr/local/opt/protobuf/include
+export MYSQLXPB_PROTOBUF_LIB_DIR=/usr/local/opt/protobuf/lib
+export MYSQLXPB_PROTOC=/usr/local/opt/protobuf/bin/protoc
+```
 
 ### Installation
 
@@ -20,7 +31,7 @@ python setup.py install
 ### Documentation
 
 Documentation for all Connector/Python versions can be found online here:
- 
+
 [dev.mysql.com/doc/connector-python/en/](http://dev.mysql.com/doc/connector-python/en/)
 
 
@@ -59,5 +70,3 @@ finally:
         cnx.close()
 
 ```
-
-
