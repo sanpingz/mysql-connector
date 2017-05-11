@@ -1,10 +1,7 @@
 MySQL Connector/Python
 ====
 
-This is a fork of [mysql-connector-python](https://github.com/mysql/mysql-connector-python).
-Aim to get started easily for beginners.
-
-### Dependencies
+### Requirements
 
 mysql-connector (version >= 2.2.3) requires [Protobuf C++](https://developers.google.com/protocol-buffers/docs/downloads) (version >= 2.6.0)
 
@@ -27,13 +24,11 @@ From source code
 python setup.py install
 ```
 
-
 ### Documentation
 
 Documentation for all Connector/Python versions can be found online here:
 
 [dev.mysql.com/doc/connector-python/en/](http://dev.mysql.com/doc/connector-python/en/)
-
 
 ### Examples
 
@@ -68,5 +63,4 @@ finally:
         cur.close()
     if cnx:
         cnx.close()
-
 ```
