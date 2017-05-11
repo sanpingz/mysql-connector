@@ -12,4 +12,5 @@ cpy_server*/
 *_output.txt
 tests_*.log
 dev*.py
+*.egg-info
 /upload.sh
