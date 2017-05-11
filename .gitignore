@@ -14,3 +14,4 @@ tests_*.log
 dev*.py
 src/mysqlxpb/mysqlx/mysqlx*
 lib/mysql_connector.egg-info
+/upload.sh
