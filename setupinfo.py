@@ -87,7 +87,7 @@ packages = [
 ]
 description = "MySQL driver written in Python"
 long_description = """
-Deprecated, use mysql-connector-python instead.
+Deprecated, go for official version https://pypi.org/project/mysql-connector-python.
 """
 author = 'Oracle and/or its affiliates'
 author_email = ''
