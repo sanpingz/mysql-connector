@@ -57,7 +57,7 @@ command_classes = {
 }
 
 package_dir = {'': 'lib'}
-name = 'mysql-connector-python'
+name = 'mysql-connector'
 version = '{0}.{1}.{2}'.format(*VERSION[0:3])
 
 extensions = [
@@ -70,7 +70,7 @@ extensions = [
                   "src/force_cpp_linkage.cc",
               ],
               include_dirs=['src/include'],
-    )
+              )
 ]
 
 packages = [
@@ -87,8 +87,9 @@ packages = [
 ]
 description = "MySQL driver written in Python"
 long_description = """
-MySQL driver written in Python which does not depend on MySQL C client
-libraries and implements the DB API v2.0 specification (PEP-249).
+Abandoned, use mysql-connector-python instead.
+MySQL driver written in Python which does not depend on MySQL C client libraries
+and implements the DB API v2.0 specification (PEP-249).
 """
 author = 'Oracle and/or its affiliates'
 author_email = ''

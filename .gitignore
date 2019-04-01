@@ -14,3 +14,5 @@ tests_*.log
 dev*.py
 /lib/mysqlx/expr_backup.py
 /lib/test.py
+
+/upload.sh
