@@ -86,13 +86,12 @@ packages = [
 ]
 description = "MySQL driver written in Python"
 long_description = """
-MySQL driver written in Python which does not depend on MySQL C client
-libraries and implements the DB API v2.0 specification (PEP-249).
+Deprecated, go for official version https://pypi.org/project/mysql-connector-python.
 """
 author = 'Oracle and/or its affiliates'
 author_email = ''
-maintainer = 'Nuno Mariz'
-maintainer_email = 'nuno.mariz@oracle.com'
+maintainer = 'Calvin Zhang'
+maintainer_email = 'zhangsp@163.com'
 cpy_gpl_license = "GNU GPLv2 (with FOSS License Exception)"
 keywords = "mysql db",
 url = 'https://github.com/sanpingz/mysql-connector'
