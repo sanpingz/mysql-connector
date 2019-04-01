@@ -30,15 +30,19 @@ To install MySQL Connector/Python:
     shell> python ./setup.py install
 
 """
+import setupinfo
 
-from distutils.core import setup
-from distutils.command.install import INSTALL_SCHEMES
+try:
+    from setuptools import setup
+    from setuptools.command.install_scheme import INSTALL_SCHEMES
+except ImportError:
+    from distutils.core import setup
+    from distutils.command.install import INSTALL_SCHEMES
 
 # Make sure that data files are actually installed in the package directory
 for install_scheme in INSTALL_SCHEMES.values():
     install_scheme['data'] = install_scheme['purelib']
 
-import setupinfo
 try:
     from cpyint import metasetupinfo
     setupinfo.command_classes.update(metasetupinfo.command_classes)
@@ -63,4 +67,3 @@ setup(
     cmdclass=setupinfo.command_classes,
     ext_modules=setupinfo.extensions,
 )
-

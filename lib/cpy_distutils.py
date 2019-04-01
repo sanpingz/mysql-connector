@@ -24,11 +24,21 @@
 """Implements the DistUtils command 'build_ext'
 """
 
-from distutils.command.build_ext import build_ext
-from distutils.command.install import install
-from distutils.command.install_lib import install_lib
+try:
+    from setuptools.command.build_ext import build_ext
+    from setuptools.command.install import install
+    from setuptools.command.install_lib import install_lib
+except ImportError:
+    from distutils.command.build_ext import build_ext
+    from distutils.command.install import install
+    from distutils.command.install_lib import install_lib
+
+try:
+    from pkg_resources import get_build_platform as get_platform
+except ImportError:
+    from distutils.util import get_platform
+
 from distutils.errors import DistutilsExecError
-from distutils.util import get_platform
 from distutils.dir_util import copy_tree
 from distutils import log
 from glob import glob
@@ -147,7 +157,7 @@ def get_mysql_config_info(mysql_config):
     """
     options = ['cflags', 'include', 'libs', 'libs_r', 'plugindir', 'version']
 
-    cmd = [mysql_config] + [ "--{0}".format(opt) for opt in options ]
+    cmd = [mysql_config] + ["--{0}".format(opt) for opt in options]
 
     try:
         proc = Popen(cmd, stdout=PIPE, universal_newlines=True)
@@ -169,7 +179,7 @@ def get_mysql_config_info(mysql_config):
     info['version'] = tuple([int(v) for v in ver.split('.')[0:3]])
     libs = shlex.split(info['libs'])
     info['lib_dir'] = libs[0].replace('-L', '')
-    info['libs'] = [ lib.replace('-l', '') for lib in libs[1:] ]
+    info['libs'] = [lib.replace('-l', '') for lib in libs[1:]]
     if platform.uname()[0] == 'SunOS':
         info['lib_dir'] = info['lib_dir'].replace('-R', '')
         info['libs'] = [lib.replace('-R', '') for lib in info['libs']]
@@ -178,7 +188,7 @@ def get_mysql_config_info(mysql_config):
         log.debug("#   {0}".format(lib))
     libs = shlex.split(info['libs_r'])
     info['lib_r_dir'] = libs[0].replace('-L', '')
-    info['libs_r'] = [ lib.replace('-l', '') for lib in libs[1:] ]
+    info['libs_r'] = [lib.replace('-l', '') for lib in libs[1:]]
 
     info['include'] = info['include'].replace('-I', '')
 
@@ -318,7 +328,7 @@ class BuildExtDynamic(build_ext):
                                         b'"', b'').split(b'.')
                                 ])
                                 if version < min_version:
-                                    log.error(err_version);
+                                    log.error(err_version)
                                     sys.exit(1)
                                 break
 
@@ -442,7 +452,7 @@ class BuildExtDynamic(build_ext):
                 cc.__dict__[name] = new_args
 
         # Add system headers to Extensions extra_compile_args
-        sysheaders = [ '-isystem' + dir for dir in cc.include_dirs]
+        sysheaders = ['-isystem' + dir for dir in cc.include_dirs]
         for ext in self.extensions:
             for sysheader in sysheaders:
                 if sysheader not in ext.extra_compile_args:
@@ -502,7 +512,6 @@ class BuildExtStatic(BuildExtDynamic):
                 lib_file_path = os.path.join(self.connc_lib, lib_file)
                 if os.path.isfile(lib_file_path) and not lib_file.endswith('.a'):
                     os.unlink(os.path.join(self.connc_lib, lib_file))
-
 
     def fix_compiler(self):
         BuildExtDynamic.fix_compiler(self)
@@ -567,7 +576,7 @@ class Install(install):
     description = "install MySQL Connector/Python"
 
     user_options = install.user_options + CEXT_OPTIONS + INSTALL_OPTIONS + \
-                   CEXT_STATIC_OPTIONS
+        CEXT_STATIC_OPTIONS
 
     boolean_options = ['byte-code-only', 'static']
     need_ext = False
