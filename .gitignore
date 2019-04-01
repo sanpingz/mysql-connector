@@ -16,3 +16,4 @@ dev*.py
 /lib/test.py
 
 /upload.sh
+lib/mysql_connector.egg-info
